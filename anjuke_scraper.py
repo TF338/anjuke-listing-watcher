@@ -444,6 +444,20 @@ class AnjukeScraper:
                 base += "/"
             base = f"{base}p{page}/"
         
+        # Add price filters to URL
+        price_min = self.config.get("price_min")
+        price_max = self.config.get("price_max")
+        
+        params = []
+        if price_min is not None:
+            params.append(f"from_price={price_min}")
+        if price_max is not None:
+            params.append(f"to_price={price_max}")
+        
+        if params:
+            separator = "&" if "?" in base else "?"
+            base = f"{base}{separator}{'&'.join(params)}"
+        
         return base
     
     def fetch_page(self, url: str, max_retries: int = 3) -> Optional[str]:
@@ -1258,16 +1272,7 @@ def main():
                     
                     # Check cache first - skip if already visited
                     if cache.is_visited(url):
-                        logger.debug(f"Skipping visited: {url}")
-                        continue
-                    
-                    # Apply price filter BEFORE fetching detail page
-                    price = extract_price(listing.get("price", ""))
-                    price_min = config.get("price_min", 0)
-                    price_max = config.get("price_max", 999999)
-                    if price is not None and (price < price_min or price > price_max):
-                        logger.debug(f"Skipping - price {price} outside range ({price_min}-{price_max}): {url}")
-                        cache.add(url)
+                        logger.info(f"Skipping cached: {url}")
                         continue
                     
                     # Apply area filter BEFORE fetching detail page

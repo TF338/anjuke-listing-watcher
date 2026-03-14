@@ -168,6 +168,13 @@ def crawl_city(
     else:
         base_url = f"https://{city}.anjuke.com{path}"
     
+    # Add price filters to URL
+    price_params = []
+    if price_min is not None:
+        price_params.append(f"from_price={price_min}")
+    if price_max is not None:
+        price_params.append(f"to_price={price_max}")
+    
     results = []
     
     for page in range(1, pages + 1):
@@ -176,6 +183,11 @@ def crawl_city(
             url = f"{base_url}p{page}/"
         else:
             url = base_url
+        
+        # Append price parameters
+        if price_params:
+            separator = "&" if "?" in url else "?"
+            url = f"{url}{separator}{'&'.join(price_params)}"
         
         logger.info(f"Crawling page {page}: {url}")
         
@@ -204,17 +216,7 @@ def crawl_city(
             
             # Skip if already cached
             if cache and cache.is_visited(url):
-                continue
-            
-            # Apply price filter BEFORE fetching detail page
-            price = extract_price(listing.get("price", ""))
-            if price_min is not None and price is not None and price < price_min:
-                if cache:
-                    cache.add(url)
-                continue
-            if price_max is not None and price is not None and price > price_max:
-                if cache:
-                    cache.add(url)
+                logger.info(f"Skipping cached: {url}")
                 continue
             
             # Apply sqm filter BEFORE fetching detail page
@@ -280,6 +282,9 @@ def crawl_city(
                 
                 if not matched_keywords:
                     continue
+            
+            # Extract price for result
+            price = extract_price(listing.get("price", ""))
             
             # Build result dict with normalized field names
             result = {
