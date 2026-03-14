@@ -44,7 +44,8 @@ keywords:
 
 # Scanning settings
 pages_to_scan: 3
-rate_limit_seconds: 2
+rate_limit_random_min: 5
+rate_limit_random_max: 10
 
 # Output mode: file or email
 output_mode: "file"

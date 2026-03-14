@@ -38,6 +38,7 @@ from anjuke_scraper import (
     LISTING_TYPE_URLS,
     USER_AGENTS,
     HEADERS,
+    CAPTCHAException,
 )
 
 
@@ -104,7 +105,8 @@ def crawl_city(
     sqm_max: Optional[int] = None,
     keywords: Optional[List[str]] = None,
     cache_path: Optional[str] = None,
-    rate_limit: int = 2,
+    rate_limit_random_min: int = 5,
+    rate_limit_random_max: int = 10,
     listing_type: str = "rent_apartment"
 ) -> List[Dict[str, Any]]:
     """
@@ -119,7 +121,8 @@ def crawl_city(
         sqm_max: Maximum square meters
         keywords: Keywords to match in title/description
         cache_path: Path to SQLite cache file (optional)
-        rate_limit: Seconds between requests
+        rate_limit_random_min: Minimum random delay between requests (seconds)
+        rate_limit_random_max: Maximum random delay between requests (seconds)
         listing_type: Type of listing (rent_apartment, rent_house, sale_apartment, sale_house)
         
     Returns:
@@ -143,7 +146,8 @@ def crawl_city(
         "keywords": keywords,
         "neighborhoods": [],
         "pages_to_scan": pages,
-        "rate_limit_seconds": rate_limit,
+        "rate_limit_random_min": rate_limit_random_min,
+        "rate_limit_random_max": rate_limit_random_max,
     }
     
     # Initialize cache if path provided
@@ -196,6 +200,19 @@ def crawl_city(
             if cache and cache.is_visited(url):
                 continue
             
+            try:
+                # Fetch listing detail page (applies rate limiting)
+                detail_html = scraper.fetch_page(url)
+                
+                if detail_html:
+                    # Parse detail page for additional fields
+                    detail_data = scraper.parse_listing_detail(detail_html)
+                    listing.update(detail_data)
+                    
+            except CAPTCHAException as e:
+                logger.error(f"CAPTCHA encountered, stopping: {e}")
+                return []
+            
             # Extract price
             price = extract_price(listing.get("price", ""))
             
@@ -219,7 +236,17 @@ def crawl_city(
             if keywords:
                 title = listing.get("title", "")
                 location = listing.get("location", "")
-                combined = title + " " + location
+                
+                # Combine all detail fields for keyword matching
+                combined = " ".join([
+                    title,
+                    location,
+                    listing.get("house_info", ""),
+                    listing.get("house_facilities", ""),
+                    listing.get("house_overview", ""),
+                    listing.get("community", ""),
+                    listing.get("community_qa", ""),
+                ])
                 
                 for kw in keywords:
                     if kw in combined:

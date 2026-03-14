@@ -19,6 +19,7 @@ import os
 import sys
 import json
 import time
+import random
 import sqlite3
 import logging
 import smtplib
@@ -234,7 +235,8 @@ def load_config(config_file: str = DEFAULT_CONFIG_FILE) -> Dict[str, Any]:
     # Set defaults
     config.setdefault("neighborhoods", [])
     config.setdefault("pages_to_scan", 3)
-    config.setdefault("rate_limit_seconds", 2)
+    config.setdefault("rate_limit_random_min", 5)
+    config.setdefault("rate_limit_random_max", 10)
     config.setdefault("output_mode", "file")
     config.setdefault("output_file", "listings.txt")
     config.setdefault("email", {})
@@ -260,6 +262,15 @@ def load_config(config_file: str = DEFAULT_CONFIG_FILE) -> Dict[str, Any]:
     
     logger.info(f"Configuration loaded: city={config['city']}, type={config['listing_type']}")
     return config
+
+
+# =============================================================================
+# Exceptions
+# =============================================================================
+
+class CAPTCHAException(Exception):
+    """Raised when CAPTCHA is detected on the page."""
+    pass
 
 
 # =============================================================================
@@ -387,14 +398,16 @@ class AnjukeScraper:
         self.logger = logger or logging.getLogger("anjuke_scraper")
         self.session = requests.Session()
         self.session.headers.update({**HEADERS, "User-Agent": USER_AGENTS[0]})
-        self.rate_limit = config.get("rate_limit_seconds", 2)
+        self.rate_limit_random_min = config.get("rate_limit_random_min", 5)
+        self.rate_limit_random_max = config.get("rate_limit_random_max", 10)
         self.last_request_time = 0
     
     def _rate_limit(self) -> None:
         """Enforce rate limiting between requests."""
         elapsed = time.time() - self.last_request_time
-        if elapsed < self.rate_limit:
-            time.sleep(self.rate_limit - elapsed)
+        random_delay = random.uniform(self.rate_limit_random_min, self.rate_limit_random_max)
+        if elapsed < random_delay:
+            time.sleep(random_delay - elapsed)
         self.last_request_time = time.time()
     
     def _get_base_url(self) -> str:
@@ -468,6 +481,12 @@ class AnjukeScraper:
                     continue
                 
                 response.raise_for_status()
+                
+                # Check for CAPTCHA page
+                if "请输入验证码" in response.text or "验证码" in response.text or "geetest" in response.text:
+                    self.logger.error("CAPTCHA detected! Stopping to avoid further blocking.")
+                    raise CAPTCHAException("CAPTCHA detected on page")
+                
                 self.logger.debug(f"Fetched: {url}")
                 return response.text
                 
@@ -477,6 +496,8 @@ class AnjukeScraper:
                 self.logger.warning(f"Connection error for {url}: {e} (attempt {attempt + 1}/{max_retries})")
             except requests.exceptions.HTTPError as e:
                 self.logger.warning(f"HTTP error for {url}: {e} (attempt {attempt + 1}/{max_retries})")
+            except CAPTCHAException:
+                raise
             except Exception as e:
                 self.logger.error(f"Unexpected error fetching {url}: {e}")
                 return None
@@ -537,6 +558,55 @@ class AnjukeScraper:
             self.logger.error(f"Failed to parse listings: {e}")
         
         return listings
+    
+    def parse_listing_detail(self, html: str) -> Dict[str, Any]:
+        """Parse listing detail page for additional information."""
+        result = {
+            "title": "",
+            "house_info": "",
+            "house_facilities": "",
+            "house_overview": "",
+            "community": "",
+            "community_qa": "",
+        }
+        
+        try:
+            soup = BeautifulSoup(html, "lxml")
+            
+            # Title
+            title_elem = soup.select_one("h1.house-title")
+            if title_elem:
+                result["title"] = title_elem.get_text(strip=True)
+            
+            # House info (房屋信息)
+            house_info_elem = soup.select_one(".house-info-zufang")
+            if house_info_elem:
+                result["house_info"] = house_info_elem.get_text(strip=True)
+            
+            # House facilities (房屋配套)
+            facility_elems = soup.select(".house-info-peitao .peitao-info")
+            facilities = [f.get_text(strip=True) for f in facility_elems]
+            result["house_facilities"] = " ".join(facilities)
+            
+            # House overview (房源概况)
+            overview_elem = soup.select_one(".auto-general")
+            if overview_elem:
+                result["house_overview"] = overview_elem.get_text(strip=True)
+            
+            # Community (小区)
+            comm_elem = soup.select_one("h2#commArround")
+            if comm_elem:
+                result["community"] = comm_elem.get_text(strip=True)
+            
+            # Community Q&A (小区问答)
+            qa_elems = soup.select(".comm-qa-unanswer li a p")
+            qa_texts = [q.get_text(strip=True) for q in qa_elems]
+            result["community_qa"] = " ".join(qa_texts)
+            
+        except Exception as e:
+            self.logger.debug(f"Failed to parse detail page: {e}")
+        
+        return result
     
     def _parse_listing_item(self, item: BeautifulSoup) -> Optional[Dict[str, Any]]:
         """
@@ -763,7 +833,17 @@ def filter_listing(
     if keywords:
         title = listing.get("title", "")
         location = listing.get("location", "")
-        combined = title + " " + location
+        
+        # Combine all detail fields for keyword matching
+        combined = " ".join([
+            title,
+            location,
+            listing.get("house_info", ""),
+            listing.get("house_facilities", ""),
+            listing.get("house_overview", ""),
+            listing.get("community", ""),
+            listing.get("community_qa", ""),
+        ])
         
         matched_keywords = []
         for kw in keywords:
@@ -931,6 +1011,98 @@ class Notifier:
         except smtplib.SMTPException as e:
             self.logger.error(f"Failed to send email: {e}")
             raise
+    
+    def notify_captcha(self, url: str) -> None:
+        """Send notification when CAPTCHA is encountered."""
+        output_mode = self.config.get("output_mode", "file")
+        
+        if output_mode == "file":
+            self._notify_captcha_file(url)
+        elif output_mode == "email":
+            self._notify_captcha_email(url)
+    
+    def _notify_captcha_file(self, url: str) -> None:
+        """Append CAPTCHA alert to output file."""
+        output_file = self.config.get("output_file", "listings.txt")
+        
+        try:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            with open(output_file, "a", encoding="utf-8") as f:
+                f.write(f"\n{'='*50}\n")
+                f.write(f"CAPTCHA DETECTED - Scraping Stopped\n")
+                f.write(f"{'='*50}\n")
+                f.write(f"Time: {timestamp}\n")
+                f.write(f"URL: {url}\n")
+                f.write(f"City: {self.config.get('city', 'N/A')}\n")
+                f.write(f"Listing Type: {self.config.get('listing_type', 'N/A')}\n")
+                f.write(f"{'='*50}\n\n")
+            
+            self.logger.info(f"CAPTCHA notification written to {output_file}")
+            
+        except IOError as e:
+            self.logger.error(f"Failed to write CAPTCHA notification: {e}")
+    
+    def _notify_captcha_email(self, url: str) -> None:
+        """Send CAPTCHA alert via email."""
+        email_config = self.config.get("email", {})
+        
+        smtp_server = email_config["smtp_server"]
+        smtp_port = email_config["smtp_port"]
+        username = email_config["username"]
+        password = email_config["password"]
+        sender = email_config["sender"]
+        recipients = email_config["recipients"]
+        
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        subject = f"[Anjuke] CAPTCHA Detected - Scraping Stopped"
+        
+        text_content = f"""
+CAPTCHA DetECTED - Scraping Stopped
+
+Time: {timestamp}
+URL: {url}
+City: {self.config.get('city', 'N/A')}
+Listing Type: {self.config.get('listing_type', 'N/A')}
+
+Please manually verify and restart the scraper.
+"""
+        
+        html_content = f"""
+<html>
+<head>
+    <meta charset="utf-8">
+</head>
+<body>
+    <h2 style="color: red;">CAPTCHA Detected - Scraping Stopped</h2>
+    <p><strong>Time:</strong> {timestamp}</p>
+    <p><strong>URL:</strong> {url}</p>
+    <p><strong>City:</strong> {self.config.get('city', 'N/A')}</p>
+    <p><strong>Listing Type:</strong> {self.config.get('listing_type', 'N/A')}</p>
+    <p>Please manually verify and restart the scraper.</p>
+</body>
+</html>
+"""
+        
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = sender
+        msg["To"] = ", ".join(recipients)
+        
+        msg.attach(MIMEText(text_content, "plain", "utf-8"))
+        msg.attach(MIMEText(html_content, "html", "utf-8"))
+        
+        try:
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                server.starttls()
+                server.login(username, password)
+                server.send_message(msg)
+            
+            self.logger.info("Sent CAPTCHA alert email")
+            
+        except smtplib.SMTPException as e:
+            self.logger.error(f"Failed to send CAPTCHA email: {e}")
 
 
 # =============================================================================
@@ -1017,12 +1189,26 @@ def main():
                     if not url:
                         continue
                     
-                    # Check cache
+                    # Check cache first - skip if already visited
                     if cache.is_visited(url):
                         logger.debug(f"Skipping visited: {url}")
                         continue
                     
-                    # Apply filters
+                    try:
+                        # Fetch listing detail page (applies rate limiting)
+                        detail_html = scraper.fetch_page(url)
+                        
+                        if detail_html:
+                            # Parse detail page for additional fields
+                            detail_data = scraper.parse_listing_detail(detail_html)
+                            listing.update(detail_data)
+                        
+                    except CAPTCHAException as e:
+                        logger.error(f"CAPTCHA encountered, stopping: {e}")
+                        notifier.notify_captcha(url)
+                        return 1
+                    
+                    # Apply filters (now includes keyword matching on detail page content)
                     matched_keywords = filter_listing(listing, config, logger)
                     
                     if matched_keywords is not None:
