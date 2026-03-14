@@ -7,8 +7,10 @@
 - 支持多种房源类型：租房、买房
 - 价格区间筛选
 - 面积区间筛选
-- 关键词过滤
+- 关键词过滤（支持房源详情页内容）
 - 持久化缓存（避免重复抓取）
+- 随机间隔限速（避免被反爬虫拦截）
+- 自动检测验证码并停止抓取
 - 文件或邮件通知
 - 完整的日志记录
 
@@ -43,6 +45,10 @@ python3 anjuke_scraper.py
 | area_min | 最小面积（平米） | 40 |
 | area_max | 最大面积（平米） | 100 |
 | keywords | 关键词列表 | ["地铁", "精装"] |
+| pages_to_scan | 扫描页数 | 3 |
+| rate_limit_random_min | 请求间隔随机最小值（秒） | 5 |
+| rate_limit_random_max | 请求间隔随机最大值（秒） | 10 |
+| fetch_detail_pages | 是否获取房源详情页 | true / false |
 | output_mode | 输出模式 | file / email |
 
 ## 运行程序

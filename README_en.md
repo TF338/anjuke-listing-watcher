@@ -7,8 +7,10 @@
 - Support multiple listing types: rentals and sales
 - Price range filtering
 - Area/square meters filtering
-- Keyword filtering
+- Keyword filtering (supports listing detail page content)
 - Persistent cache (avoids duplicate scraping)
+- Random interval rate limiting (avoids anti-scraping detection)
+- Automatic CAPTCHA detection with stop-on-captcha
 - File or email notifications
 - Comprehensive logging
 
@@ -43,6 +45,10 @@ python3 anjuke_scraper.py
 | area_min | Minimum area (sqm) | 40 |
 | area_max | Maximum area (sqm) | 100 |
 | keywords | Keyword list | ["地铁", "精装"] |
+| pages_to_scan | Number of pages to scan | 3 |
+| rate_limit_random_min | Min random delay between requests (seconds) | 5 |
+| rate_limit_random_max | Max random delay between requests (seconds) | 10 |
+| fetch_detail_pages | Whether to fetch listing detail pages | true / false |
 | output_mode | Output mode | file / email |
 
 ## Running
