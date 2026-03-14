@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+venv/
+.venv/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project (auto-generated)
+cache.db
+listings.txt
+anjuke_scraper.log
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config
+config.yaml
+
+# Tests
+tests/
+.pytest_cache/

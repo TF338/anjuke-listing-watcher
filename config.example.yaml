@@ -1,0 +1,65 @@
+# Anjuke Listing Watcher - Example Configuration
+# =============================================
+#
+# Copy this file to config.yaml and customize the values:
+#   cp config.example.yaml config.yaml
+#
+# Find your city code:
+#   Go to https://www.anjuke.com and click your city.
+#   Use the 2-letter code from the URL (e.g., sz, sh, km, bj)
+#
+# For rentals: {city}.zu.anjuke.com/fangyuan/
+# For sales: {city}.anjuke.com/sale/
+
+# City subdomain (2-letter code from anjuke.com URL)
+# Examples: sz (Shenzhen), sh (Shanghai), km (Kunming), bj (Beijing)
+city: "sz"
+
+# Listing type
+# Options: 
+#   rent_apartment - Rental apartments
+#   rent_house     - Rental houses  
+#   sale_apartment - Second-hand apartments for sale
+#   sale_house     - Second-hand houses for sale
+listing_type: "rent_apartment"
+
+# Filter by neighborhoods (empty list = no filter)
+# Example: ["南山区", "福田区"]
+neighborhoods: []
+
+# Price range (monthly rent for rentals, total price for sales)
+price_min: 1000
+price_max: 5000
+
+# Area range in square meters (leave blank or comment out to disable filter)
+# area_min: 30
+# area_max: 100
+
+# Keywords to match in listing title or description
+# At least one keyword must be present for a match
+keywords:
+  - "地铁"
+  - "精装"
+  - "拎包入住"
+
+# Scanning settings
+pages_to_scan: 3
+rate_limit_seconds: 2
+
+# Output mode: file or email
+output_mode: "file"
+output_file: "listings.txt"
+
+# Email settings (only used when output_mode=email)
+# Note: 
+#   - For Gmail: Use App Password (enable 2FA first at https://myaccount.google.com/signinoptions/two-step-verification)
+#   - For QQ/163: Use authorization code instead of login password
+#   - For Outlook: Use App Password
+email:
+  smtp_server: "smtp.gmail.com"
+  smtp_port: 587
+  username: "your-email@gmail.com"
+  password: "your-app-password"
+  sender: "your-email@gmail.com"
+  recipients:
+    - "you@example.com"
