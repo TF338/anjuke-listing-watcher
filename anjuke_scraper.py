@@ -1267,18 +1267,30 @@ def main():
                         detail_page_count += 1
                         logger.info(f"Crawling details page {detail_page_count}: {url}")
                         
-                        try:
-                            detail_html = scraper.fetch_page(url)
-                            
-                            if detail_html:
-                                # Parse detail page for additional fields
-                                detail_data = scraper.parse_listing_detail(detail_html)
-                                listing.update(detail_data)
-                            
-                        except CAPTCHAException as e:
-                            logger.error(f"CAPTCHA encountered, stopping: {e}")
-                            notifier.notify_captcha(url, new_matches, str(e))
-                            return 1
+                        # Retry logic for CAPTCHA
+                        max_retries = 3
+                        retry_count = 0
+                        detail_html = None
+                        
+                        while retry_count < max_retries:
+                            try:
+                                detail_html = scraper.fetch_page(url)
+                                break  # Success, exit retry loop
+                                
+                            except CAPTCHAException as e:
+                                retry_count += 1
+                                if retry_count < max_retries:
+                                    logger.warning(f"CAPTCHA hit on {url}, retrying in 60s ({retry_count}/{max_retries})...")
+                                    time.sleep(60)  # Wait 1 minute before retry
+                                else:
+                                    logger.error(f"CAPTCHA retry failed after {max_retries} attempts: {e}")
+                                    notifier.notify_captcha(url, new_matches, str(e))
+                                    return 1
+                        
+                        if detail_html:
+                            # Parse detail page for additional fields
+                            detail_data = scraper.parse_listing_detail(detail_html)
+                            listing.update(detail_data)
                     
                     # Apply filters (now includes keyword matching on detail page content)
                     matched_keywords = filter_listing(listing, config, logger)
