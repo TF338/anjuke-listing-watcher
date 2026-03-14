@@ -193,6 +193,9 @@ def crawl_city(
             logger.info(f"No listings found on page {page}")
             break
         
+        # Counter for detail pages
+        detail_page_count = 0
+        
         # Process each listing
         for listing in listings:
             url = listing.get("url")
@@ -205,6 +208,9 @@ def crawl_city(
             
             # Fetch listing detail page if enabled (applies rate limiting)
             if fetch_detail_pages:
+                detail_page_count += 1
+                logger.info(f"Crawling details page {detail_page_count}: {url}")
+                
                 try:
                     detail_html = scraper.fetch_page(url)
                     

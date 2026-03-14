@@ -1184,6 +1184,9 @@ def main():
                     logger.info(f"No listings found on page {page}, stopping pagination")
                     break
                 
+                # Counter for detail pages
+                detail_page_count = 0
+                
                 # Process each listing
                 for listing in listings:
                     url = listing.get("url")
@@ -1198,6 +1201,9 @@ def main():
                     # Fetch listing detail page if enabled (applies rate limiting)
                     fetch_detail = config.get("fetch_detail_pages", True)
                     if fetch_detail:
+                        detail_page_count += 1
+                        logger.info(f"Crawling details page {detail_page_count}: {url}")
+                        
                         try:
                             detail_html = scraper.fetch_page(url)
                             
