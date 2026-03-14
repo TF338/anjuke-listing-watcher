@@ -438,11 +438,14 @@ class AnjukeScraper:
         if neighborhood:
             base = f"{base}{neighborhood}/"
         
+        # Add px3 (newest listings first)
         if page > 1:
-            # Anjuke uses /p{page}/ for pagination
+            # Anjuke uses /px3-p{page}/ for pagination with newest first
             if not base.endswith("/"):
                 base += "/"
-            base = f"{base}p{page}/"
+            base = f"{base}px3-p{page}/"
+        else:
+            base = f"{base}px3/"
         
         # Add price filters to URL
         price_min = self.config.get("price_min")

@@ -178,11 +178,11 @@ def crawl_city(
     results = []
     
     for page in range(1, pages + 1):
-        # Build page URL
+        # Build page URL with px3 (newest listings first)
         if page > 1:
-            url = f"{base_url}p{page}/"
+            url = f"{base_url}px3-p{page}/"
         else:
-            url = base_url
+            url = f"{base_url}px3/"
         
         # Append price parameters
         if price_params:
