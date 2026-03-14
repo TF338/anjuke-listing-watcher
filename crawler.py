@@ -107,6 +107,7 @@ def crawl_city(
     cache_path: Optional[str] = None,
     rate_limit_random_min: int = 5,
     rate_limit_random_max: int = 10,
+    fetch_detail_pages: bool = True,
     listing_type: str = "rent_apartment"
 ) -> List[Dict[str, Any]]:
     """
@@ -123,6 +124,7 @@ def crawl_city(
         cache_path: Path to SQLite cache file (optional)
         rate_limit_random_min: Minimum random delay between requests (seconds)
         rate_limit_random_max: Maximum random delay between requests (seconds)
+        fetch_detail_pages: Whether to fetch individual listing detail pages
         listing_type: Type of listing (rent_apartment, rent_house, sale_apartment, sale_house)
         
     Returns:
@@ -148,6 +150,7 @@ def crawl_city(
         "pages_to_scan": pages,
         "rate_limit_random_min": rate_limit_random_min,
         "rate_limit_random_max": rate_limit_random_max,
+        "fetch_detail_pages": fetch_detail_pages,
     }
     
     # Initialize cache if path provided
@@ -200,18 +203,19 @@ def crawl_city(
             if cache and cache.is_visited(url):
                 continue
             
-            try:
-                # Fetch listing detail page (applies rate limiting)
-                detail_html = scraper.fetch_page(url)
-                
-                if detail_html:
-                    # Parse detail page for additional fields
-                    detail_data = scraper.parse_listing_detail(detail_html)
-                    listing.update(detail_data)
+            # Fetch listing detail page if enabled (applies rate limiting)
+            if fetch_detail_pages:
+                try:
+                    detail_html = scraper.fetch_page(url)
                     
-            except CAPTCHAException as e:
-                logger.error(f"CAPTCHA encountered, stopping: {e}")
-                return []
+                    if detail_html:
+                        # Parse detail page for additional fields
+                        detail_data = scraper.parse_listing_detail(detail_html)
+                        listing.update(detail_data)
+                        
+                except CAPTCHAException as e:
+                    logger.error(f"CAPTCHA encountered, stopping: {e}")
+                    return []
             
             # Extract price
             price = extract_price(listing.get("price", ""))

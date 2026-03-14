@@ -46,6 +46,7 @@ keywords:
 pages_to_scan: 3
 rate_limit_random_min: 5
 rate_limit_random_max: 10
+fetch_detail_pages: true
 
 # Output mode: file or email
 output_mode: "file"

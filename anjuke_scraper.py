@@ -237,6 +237,7 @@ def load_config(config_file: str = DEFAULT_CONFIG_FILE) -> Dict[str, Any]:
     config.setdefault("pages_to_scan", 3)
     config.setdefault("rate_limit_random_min", 5)
     config.setdefault("rate_limit_random_max", 10)
+    config.setdefault("fetch_detail_pages", True)
     config.setdefault("output_mode", "file")
     config.setdefault("output_file", "listings.txt")
     config.setdefault("email", {})
@@ -1194,19 +1195,21 @@ def main():
                         logger.debug(f"Skipping visited: {url}")
                         continue
                     
-                    try:
-                        # Fetch listing detail page (applies rate limiting)
-                        detail_html = scraper.fetch_page(url)
-                        
-                        if detail_html:
-                            # Parse detail page for additional fields
-                            detail_data = scraper.parse_listing_detail(detail_html)
-                            listing.update(detail_data)
-                        
-                    except CAPTCHAException as e:
-                        logger.error(f"CAPTCHA encountered, stopping: {e}")
-                        notifier.notify_captcha(url)
-                        return 1
+                    # Fetch listing detail page if enabled (applies rate limiting)
+                    fetch_detail = config.get("fetch_detail_pages", True)
+                    if fetch_detail:
+                        try:
+                            detail_html = scraper.fetch_page(url)
+                            
+                            if detail_html:
+                                # Parse detail page for additional fields
+                                detail_data = scraper.parse_listing_detail(detail_html)
+                                listing.update(detail_data)
+                            
+                        except CAPTCHAException as e:
+                            logger.error(f"CAPTCHA encountered, stopping: {e}")
+                            notifier.notify_captcha(url)
+                            return 1
                     
                     # Apply filters (now includes keyword matching on detail page content)
                     matched_keywords = filter_listing(listing, config, logger)
