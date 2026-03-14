@@ -206,6 +206,28 @@ def crawl_city(
             if cache and cache.is_visited(url):
                 continue
             
+            # Apply price filter BEFORE fetching detail page
+            price = extract_price(listing.get("price", ""))
+            if price_min is not None and price is not None and price < price_min:
+                if cache:
+                    cache.add(url)
+                continue
+            if price_max is not None and price is not None and price > price_max:
+                if cache:
+                    cache.add(url)
+                continue
+            
+            # Apply sqm filter BEFORE fetching detail page
+            square_meters = extract_area(listing.get("area", ""))
+            if sqm_min is not None and square_meters is not None and square_meters < sqm_min:
+                if cache:
+                    cache.add(url)
+                continue
+            if sqm_max is not None and square_meters is not None and square_meters > sqm_max:
+                if cache:
+                    cache.add(url)
+                continue
+            
             # Fetch listing detail page if enabled (applies rate limiting)
             if fetch_detail_pages:
                 detail_page_count += 1
@@ -235,25 +257,7 @@ def crawl_city(
                     detail_data = scraper.parse_listing_detail(detail_html)
                     listing.update(detail_data)
             
-            # Extract price
-            price = extract_price(listing.get("price", ""))
-            
-            # Extract square meters (area)
-            square_meters = extract_area(listing.get("area", ""))
-            
-            # Apply price filter
-            if price_min is not None and price is not None and price < price_min:
-                continue
-            if price_max is not None and price is not None and price > price_max:
-                continue
-            
-            # Apply sqm filter
-            if sqm_min is not None and square_meters is not None and square_meters < sqm_min:
-                continue
-            if sqm_max is not None and square_meters is not None and square_meters > sqm_max:
-                continue
-            
-            # Apply keyword filter
+            # Apply keyword filter (includes detail page content)
             matched_keywords = []
             if keywords:
                 title = listing.get("title", "")

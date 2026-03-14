@@ -1261,6 +1261,29 @@ def main():
                         logger.debug(f"Skipping visited: {url}")
                         continue
                     
+                    # Apply price filter BEFORE fetching detail page
+                    price = extract_price(listing.get("price", ""))
+                    price_min = config.get("price_min", 0)
+                    price_max = config.get("price_max", 999999)
+                    if price is not None and (price < price_min or price > price_max):
+                        logger.debug(f"Skipping - price {price} outside range ({price_min}-{price_max}): {url}")
+                        cache.add(url)
+                        continue
+                    
+                    # Apply area filter BEFORE fetching detail page
+                    area = extract_area(listing.get("area", ""))
+                    area_min = config.get("area_min")
+                    area_max = config.get("area_max")
+                    if area is not None:
+                        if area_min is not None and area < area_min:
+                            logger.debug(f"Skipping - area {area} below min {area_min}: {url}")
+                            cache.add(url)
+                            continue
+                        if area_max is not None and area > area_max:
+                            logger.debug(f"Skipping - area {area} above max {area_max}: {url}")
+                            cache.add(url)
+                            continue
+                    
                     # Fetch listing detail page if enabled (applies rate limiting)
                     fetch_detail = config.get("fetch_detail_pages", True)
                     if fetch_detail:
