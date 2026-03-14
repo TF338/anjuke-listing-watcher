@@ -483,8 +483,8 @@ class AnjukeScraper:
                 
                 response.raise_for_status()
                 
-                # Check for CAPTCHA page
-                if "请输入验证码" in response.text or "验证码" in response.text or "geetest" in response.text:
+                # Check for CAPTCHA page (more strict detection)
+                if "访问过于频繁" in response.text or "geetest" in response.text:
                     self.logger.error("CAPTCHA detected! Stopping to avoid further blocking.")
                     raise CAPTCHAException("CAPTCHA detected on page")
                 
@@ -1013,16 +1013,16 @@ class Notifier:
             self.logger.error(f"Failed to send email: {e}")
             raise
     
-    def notify_captcha(self, url: str) -> None:
+    def notify_captcha(self, url: str, listings: Optional[List[Dict[str, Any]]] = None, error_message: str = "") -> None:
         """Send notification when CAPTCHA is encountered."""
         output_mode = self.config.get("output_mode", "file")
         
         if output_mode == "file":
-            self._notify_captcha_file(url)
+            self._notify_captcha_file(url, listings, error_message)
         elif output_mode == "email":
-            self._notify_captcha_email(url)
+            self._notify_captcha_email(url, listings, error_message)
     
-    def _notify_captcha_file(self, url: str) -> None:
+    def _notify_captcha_file(self, url: str, listings: Optional[List[Dict[str, Any]]] = None, error_message: str = "") -> None:
         """Append CAPTCHA alert to output file."""
         output_file = self.config.get("output_file", "listings.txt")
         
@@ -1037,14 +1037,35 @@ class Notifier:
                 f.write(f"URL: {url}\n")
                 f.write(f"City: {self.config.get('city', 'N/A')}\n")
                 f.write(f"Listing Type: {self.config.get('listing_type', 'N/A')}\n")
-                f.write(f"{'='*50}\n\n")
+                
+                # Add matches found before CAPTCHA
+                if listings:
+                    f.write(f"\n=== Matches Found Before CAPTCHA ===\n")
+                    f.write(f"Found {len(listings)} matching listing(s):\n\n")
+                    for listing in listings:
+                        keywords_str = ", ".join(listing.get("matched_keywords", [])) or "N/A"
+                        area_str = listing.get("area", "") or "N/A"
+                        f.write(f"Title: {listing.get('title', 'N/A')}\n")
+                        f.write(f"Price: {listing.get('price', 'N/A')}\n")
+                        f.write(f"Area: {area_str}\n")
+                        f.write(f"Keywords: [{keywords_str}]\n")
+                        f.write(f"URL: {listing.get('url', 'N/A')}\n")
+                        f.write("---\n")
+                
+                # Add error message at the end
+                if error_message:
+                    f.write(f"\n{'='*50}\n")
+                    f.write(f"ERROR: {error_message}\n")
+                    f.write(f"{'='*50}\n")
+                
+                f.write(f"\n")
             
             self.logger.info(f"CAPTCHA notification written to {output_file}")
             
         except IOError as e:
             self.logger.error(f"Failed to write CAPTCHA notification: {e}")
     
-    def _notify_captcha_email(self, url: str) -> None:
+    def _notify_captcha_email(self, url: str, listings: Optional[List[Dict[str, Any]]] = None, error_message: str = "") -> None:
         """Send CAPTCHA alert via email."""
         email_config = self.config.get("email", {})
         
@@ -1059,21 +1080,61 @@ class Notifier:
         
         subject = f"[Anjuke] CAPTCHA Detected - Scraping Stopped"
         
-        text_content = f"""
-CAPTCHA DetECTED - Scraping Stopped
+        # Build matches content
+        matches_html = ""
+        matches_text = ""
+        if listings:
+            matches_text = f"\n=== Matches Found Before CAPTCHA ===\nFound {len(listings)} matching listing(s):\n\n"
+            matches_html = f"<h3>Matches Found Before CAPTCHA</h3><p>Found {len(listings)} matching listing(s):</p>"
+            
+            for listing in listings:
+                keywords_str = ", ".join(listing.get("matched_keywords", [])) or "N/A"
+                area_str = listing.get("area", "") or "N/A"
+                matches_text += f"Title: {listing.get('title', 'N/A')}\n"
+                matches_text += f"Price: {listing.get('price', 'N/A')}\n"
+                matches_text += f"Area: {area_str}\n"
+                matches_text += f"Keywords: [{keywords_str}]\n"
+                matches_text += f"URL: {listing.get('url', 'N/A')}\n"
+                matches_text += "---\n\n"
+                
+                matches_html += f"""
+                <div class="listing">
+                    <div class="title">{listing.get('title', 'N/A')}</div>
+                    <div class="price">{listing.get('price', 'N/A')}</div>
+                    <div class="area">Area: {area_str}</div>
+                    <div class="keywords">Keywords: [{keywords_str}]</div>
+                    <div class="url"><a href="{listing.get('url', '#')}">{listing.get('url', 'N/A')}</a></div>
+                </div>
+                """
+        
+        # Build error message section
+        error_text = ""
+        error_html = ""
+        if error_message:
+            error_text = f"\n{'='*50}\nERROR: {error_message}\n{'='*50}\n"
+            error_html = f"<h3 style='color: red;'>{'='*50}<br/>ERROR: {error_message}<br/>{'='*50}</h3>"
+        
+        text_content = f"""CAPTCHA DetECTED - Scraping Stopped
 
 Time: {timestamp}
 URL: {url}
 City: {self.config.get('city', 'N/A')}
 Listing Type: {self.config.get('listing_type', 'N/A')}
-
+{matches_text}{error_text}
 Please manually verify and restart the scraper.
 """
         
-        html_content = f"""
-<html>
+        html_content = f"""<html>
 <head>
     <meta charset="utf-8">
+    <style>
+        body {{ font-family: Arial, sans-serif; }}
+        .listing {{ margin-bottom: 20px; padding: 10px; border: 1px solid #ddd; }}
+        .title {{ font-weight: bold; font-size: 16px; }}
+        .price {{ color: #e74c3c; font-size: 18px; }}
+        .keywords {{ color: #27ae60; }}
+        .url {{ color: #3498db; }}
+    </style>
 </head>
 <body>
     <h2 style="color: red;">CAPTCHA Detected - Scraping Stopped</h2>
@@ -1081,6 +1142,8 @@ Please manually verify and restart the scraper.
     <p><strong>URL:</strong> {url}</p>
     <p><strong>City:</strong> {self.config.get('city', 'N/A')}</p>
     <p><strong>Listing Type:</strong> {self.config.get('listing_type', 'N/A')}</p>
+    {matches_html}
+    {error_html}
     <p>Please manually verify and restart the scraper.</p>
 </body>
 </html>
@@ -1214,7 +1277,7 @@ def main():
                             
                         except CAPTCHAException as e:
                             logger.error(f"CAPTCHA encountered, stopping: {e}")
-                            notifier.notify_captcha(url)
+                            notifier.notify_captcha(url, new_matches, str(e))
                             return 1
                     
                     # Apply filters (now includes keyword matching on detail page content)
