@@ -15,7 +15,7 @@
 ## 安装
 
 ```bash
-pip install requests beautifulsoup4 pyyaml
+pip install requests beautifulsoup4 pyyaml lxml
 ```
 
 ## 快速开始
